@@ -1,6 +1,6 @@
 # GIFinder
-Aplicacion frontend desarrollada con Vite y TypeScript para consultar,
-buscar y visualizar contenido multimedia mediante la API de giphy.
+Aplicación frontend desarrollada con Vite y TypeScript para consultar,
+buscar y visualizar contenido multimedia mediante la API de Giphy.
 
 ## Tecnologias
 
@@ -15,16 +15,16 @@ buscar y visualizar contenido multimedia mediante la API de giphy.
 - PNPM
 
 ## Instalacion
-'''bash
+```bash
 pnpm install
-'''
+```
 ## Ejecucion
-'''bash
+```bash
 pnpm dev
-'''
+```
 ## Compilacion
-'''bash
+```bash
 pnpm build
-'''
+```
 ## Autor
 Joseph De Jesús Pérez Madrid
