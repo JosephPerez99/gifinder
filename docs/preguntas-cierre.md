@@ -1,7 +1,5 @@
 # Preguntas de cierre
 
-# Preguntas de cierre - EC1 F1 A1
-
 ## 1. ¿Qué función cumple Node.js en el entorno de desarrollo de una aplicación frontend?
 
 Node.js permite ejecutar JavaScript fuera del navegador y proporciona el entorno necesario para utilizar herramientas como Vite y PNPM durante el desarrollo del proyecto.
