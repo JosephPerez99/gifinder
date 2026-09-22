@@ -1,44 +1,15 @@
 import "./styles/style.css";
-import type { Gif } from "./models/gif.interface";
-
-const MEDIA_URL = "https://media.giphy.com/media";
-
-const gifs: Gif[] = [
-  {
-    id: "cat-01",
-    title: "Gato programando",
-    url: `${MEDIA_URL}/JIX9t2j0ZTN9S/giphy.gif`,
-    username: "gifinder",
-    tags: ["gato", "programación", "computadora"],
-    rating: "g",
-  },
-  {
-    id: "celebration-01",
-    title: "Celebración del equipo",
-    url: `${MEDIA_URL}/g9582DNuQppxC/giphy.gif`,
-    tags: ["equipo", "éxito", "celebración"],
-    rating: "g",
-  },
-  {
-    id: "coding-01",
-    title: "Código en progreso",
-    url: `${MEDIA_URL}/13HgwGsXF0aiGY/giphy.gif`,
-    username: "developer",
-    tags: ["código", "desarrollo", "teclado"],
-    rating: "pg",
-  },
-  {
-    id: "idea-01",
-    title: "Nueva idea",
-    url: `${MEDIA_URL}/l0HlRnAWXxn0MhKLK/giphy.gif`,
-    tags: ["idea", "creatividad", "solución"],
-    rating: "g",
-  },
-];
-
-gifs.forEach((gif, index) => {
-  console.log(`${index + 1}. ${gif.title}`);
-});
+import { gifs } from "./data/gifs";
+import { clearGifDetail, renderGifDetail } from "./components/gif-detail";
+import { renderGallery } from "./components/gallery";
+import { renderStatus } from "./components/status";
+import type { GifRating } from "./models/gif.interface";
+import { RequestStatus } from "./models/request-status.enum";
+import {
+  filterGifsByRating,
+  findGifById,
+  searchGifs,
+} from "./services/gif.service";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -49,7 +20,7 @@ if (!app) {
 app.innerHTML = `
   <main class="app-shell">
     <header class="hero">
-      <p class="eyebrow">EC1 - Fundamentos de TypeScript</p>
+      <p class="eyebrow">EC1 - Organización modular</p>
       <h1>GIFinder</h1>
       <p>Explora una colección local de GIFs.</p>
     </header>
@@ -70,105 +41,115 @@ app.innerHTML = `
 
         <button type="submit">Buscar</button>
       </div>
+
+      <label for="rating-filter">Filtrar por clasificación</label>
+      <select id="rating-filter" name="rating">
+        <option value="all">Todas</option>
+        <option value="g">G</option>
+        <option value="pg">PG</option>
+        <option value="pg-13">PG-13</option>
+      </select>
     </form>
 
-    <p id="search-status" class="status" aria-live="polite"></p>
-
+    <p id="search-status" class="status" role="status" aria-live="polite"></p>
     <section id="gif-gallery" class="gallery" aria-label="Resultados"></section>
+    <aside id="gif-detail" class="gif-detail-container" aria-live="polite"></aside>
   </main>
 `;
 
 const form = document.querySelector<HTMLFormElement>("#search-form");
 const input = document.querySelector<HTMLInputElement>("#search-input");
+const ratingFilter = document.querySelector<HTMLSelectElement>("#rating-filter");
 const gallery = document.querySelector<HTMLElement>("#gif-gallery");
 const status = document.querySelector<HTMLParagraphElement>("#search-status");
+const detailContainer = document.querySelector<HTMLElement>("#gif-detail");
 
-if (!form || !input || !gallery || !status) {
-  throw new Error("No se pudo inicializar la interfaz de búsqueda.");
+if (!form || !input || !ratingFilter || !gallery || !status || !detailContainer) {
+  throw new Error("No se pudo inicializar la interfaz.");
 }
 
-const safeForm = form;
-const safeInput = input;
-const safeGallery = gallery;
-const safeStatus = status;
+form.addEventListener("submit", (event: SubmitEvent) => {
+  event.preventDefault();
+  renderStatus(RequestStatus.Loading, status);
 
-function normalizeText(value: string): string {
-  return value.trim().toLocaleLowerCase("es-MX");
-}
+  const selectedRating: GifRating | "all" = ratingFilter.value as GifRating | "all";
+  const searchedGifs = searchGifs(gifs, input.value);
+  const results = filterGifsByRating(searchedGifs, selectedRating);
+  renderGallery(results, gallery);
+  clearGifDetail(detailContainer);
 
-function matchesQuery(gif: Gif, query: string): boolean {
-  const searchableText = [gif.title, gif.username ?? "", ...gif.tags].join(" ");
-
-  return normalizeText(searchableText).includes(query);
-}
-
-function searchGifs(collection: Gif[], value: string): Gif[] {
-  const query = normalizeText(value);
-
-  if (!query) {
-    return [...collection];
-  }
-
-  return collection.filter((gif) => matchesQuery(gif, query));
-}
-
-function createGifCard(gif: Gif): string {
-  const {
-    title,
-    url,
-    username = "Autor no disponible",
-    tags,
-    rating,
-  } = gif;
-
-  return `
-    <article class="gif-card">
-      <img src="${url}" alt="${title}" loading="lazy" />
-
-      <div class="gif-card__content">
-        <h2>${title}</h2>
-        <p>${username} - Clasificación ${rating.toUpperCase()}</p>
-        <p class="tags">${tags.map((tag) => `#${tag}`).join(" ")}</p>
-      </div>
-    </article>
-  `;
-}
-
-function renderGifs(collection: Gif[]): void {
-  const total = collection.length;
-  const label = total === 1 ? "resultado" : "resultados";
-
-  safeStatus.textContent = `${total} ${label}`;
-
-  if (total === 0) {
-    safeGallery.innerHTML = `
-      <p class="empty-state">
-        No se encontraron GIFs.
-        Prueba con otra palabra.
-      </p>
-    `;
-
+  if (results.length === 0) {
+    renderStatus(RequestStatus.Empty, status);
     return;
   }
 
-  safeGallery.innerHTML = collection.map(createGifCard).join("");
-}
-
-safeForm.addEventListener("submit", (event: SubmitEvent) => {
-  event.preventDefault();
-
-  const results = searchGifs(gifs, safeInput.value);
-  renderGifs(results);
+  renderStatus(RequestStatus.Success, status, results.length);
 });
 
-safeInput.addEventListener("input", () => {
-  if (safeInput.value.trim() === "") {
-    renderGifs(gifs);
+input.addEventListener("input", () => {
+  if (input.value.trim() !== "") {
+    return;
   }
+
+  const selectedRating: GifRating | "all" = ratingFilter.value as GifRating | "all";
+  const results = filterGifsByRating(gifs, selectedRating);
+
+  renderGallery(results, gallery);
+  clearGifDetail(detailContainer);
+  renderStatus(RequestStatus.Initial, status, results.length);
 });
 
-const firstSafeGif = gifs.find((gif) => gif.rating === "g");
+ratingFilter.addEventListener("change", () => {
+  form.requestSubmit();
+});
 
-console.log(`Primer GIF clasificación G: ${firstSafeGif?.title ?? "Ninguno"}`);
+gallery.addEventListener("click", (event) => {
+  const target = event.target;
 
-renderGifs(gifs);
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const detailButton = target.closest<HTMLButtonElement>("[data-gif-id]");
+
+  if (!detailButton) {
+    return;
+  }
+
+  const gifId = detailButton.dataset.gifId;
+
+  if (!gifId) {
+    renderStatus(RequestStatus.Error, status);
+    return;
+  }
+
+  const selectedGif = findGifById(gifs, gifId);
+
+  if (!selectedGif) {
+    renderStatus(RequestStatus.Error, status);
+    return;
+  }
+
+  renderGifDetail(selectedGif, detailContainer);
+});
+
+detailContainer.addEventListener("click", (event) => {
+  const target = event.target;
+
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const closeButton = target.closest<HTMLButtonElement>(
+    '[data-action="close-detail"]',
+  );
+
+  if (!closeButton) {
+    return;
+  }
+
+  clearGifDetail(detailContainer);
+});
+
+renderGallery(gifs, gallery);
+renderStatus(RequestStatus.Initial, status, gifs.length);
