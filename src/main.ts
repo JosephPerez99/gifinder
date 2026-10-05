@@ -1,106 +1,122 @@
 import "./styles/style.css";
-import { gifs } from "./data/gifs";
-import { clearGifDetail, renderGifDetail } from "./components/gif-detail";
+import {
+  clearGifDetail,
+  renderGifDetail,
+} from "./components/gif-detail";
 import { renderGallery } from "./components/gallery";
 import { renderStatus } from "./components/status";
-import type { GifRating } from "./models/gif.interface";
+import type { Gif } from "./models/gif.interface";
 import { RequestStatus } from "./models/request-status.enum";
 import {
-  filterGifsByRating,
   findGifById,
+  getTrendingGifs,
   searchGifs,
 } from "./services/gif.service";
+import { getRequiredElement } from "./utils/dom";
 
-const app = document.querySelector<HTMLDivElement>("#app");
-
-if (!app) {
-  throw new Error("No se encontró el elemento #app.");
-}
+const app = getRequiredElement<HTMLDivElement>("#app");
 
 app.innerHTML = `
   <main class="app-shell">
     <header class="hero">
-      <p class="eyebrow">EC1 - Organización modular</p>
+      <p class="eyebrow">EC1 - Programación asíncrona</p>
       <h1>GIFinder</h1>
-      <p>Explora una colección local de GIFs.</p>
+      <p>Busca contenido mediante la API de GIPHY.</p>
     </header>
 
     <form id="search-form" class="search-form">
-      <label for="search-input">
-        Buscar por título, autor o etiqueta
-      </label>
-
+      <label for="search-input">Buscar GIF</label>
       <div class="search-row">
         <input
           id="search-input"
           name="query"
           type="search"
-          placeholder="Ejemplo: gato"
+          maxlength="50"
+          placeholder="Ejemplo: programación"
           autocomplete="off"
         />
-
         <button type="submit">Buscar</button>
       </div>
-
-      <label for="rating-filter">Filtrar por clasificación</label>
-      <select id="rating-filter" name="rating">
-        <option value="all">Todas</option>
-        <option value="g">G</option>
-        <option value="pg">PG</option>
-        <option value="pg-13">PG-13</option>
-      </select>
     </form>
 
-    <p id="search-status" class="status" role="status" aria-live="polite"></p>
-    <section id="gif-gallery" class="gallery" aria-label="Resultados"></section>
-    <aside id="gif-detail" class="gif-detail-container" aria-live="polite"></aside>
+    <p
+      id="search-status"
+      class="status"
+      role="status"
+      aria-live="polite"
+    ></p>
+    <section
+      id="gif-gallery"
+      class="gallery"
+      aria-label="Resultados"
+    ></section>
+    <aside
+      id="gif-detail"
+      class="gif-detail-container"
+      aria-live="polite"
+    ></aside>
+    <footer class="giphy-attribution">
+      <a href="https://giphy.com/" target="_blank" rel="noopener noreferrer">
+        <img src="/powered-by-giphy.png" alt="Powered by GIPHY" />
+      </a>
+    </footer>
   </main>
 `;
 
-const form = document.querySelector<HTMLFormElement>("#search-form");
-const input = document.querySelector<HTMLInputElement>("#search-input");
-const ratingFilter = document.querySelector<HTMLSelectElement>("#rating-filter");
-const gallery = document.querySelector<HTMLElement>("#gif-gallery");
-const status = document.querySelector<HTMLParagraphElement>("#search-status");
-const detailContainer = document.querySelector<HTMLElement>("#gif-detail");
+const form = getRequiredElement<HTMLFormElement>("#search-form");
+const input = getRequiredElement<HTMLInputElement>("#search-input");
+const gallery = getRequiredElement<HTMLElement>("#gif-gallery");
+const status = getRequiredElement<HTMLParagraphElement>("#search-status");
+const detailContainer = getRequiredElement<HTMLElement>("#gif-detail");
 
-if (!form || !input || !ratingFilter || !gallery || !status || !detailContainer) {
-  throw new Error("No se pudo inicializar la interfaz.");
+let currentGifs: Gif[] = [];
+
+function showResults(results: Gif[]): void {
+  currentGifs = results;
+  renderGallery(currentGifs, gallery);
+  renderStatus(
+    currentGifs.length > 0
+      ? RequestStatus.Success
+      : RequestStatus.Empty,
+    status,
+    currentGifs.length,
+  );
 }
 
-form.addEventListener("submit", (event: SubmitEvent) => {
-  event.preventDefault();
+function showRequestError(error: unknown): void {
+  const message = error instanceof Error
+    ? error.message
+    : "Error desconocido.";
+
+  console.error(message);
+  currentGifs = [];
+  renderGallery(currentGifs, gallery);
+  clearGifDetail(detailContainer);
+  renderStatus(RequestStatus.Error, status);
+}
+
+async function loadTrending(): Promise<void> {
   renderStatus(RequestStatus.Loading, status);
 
-  const selectedRating: GifRating | "all" = ratingFilter.value as GifRating | "all";
-  const searchedGifs = searchGifs(gifs, input.value);
-  const results = filterGifsByRating(searchedGifs, selectedRating);
-  renderGallery(results, gallery);
+  try {
+    const results = await getTrendingGifs();
+    showResults(results);
+  } catch (error: unknown) {
+    showRequestError(error);
+  }
+}
+
+form.addEventListener("submit", async (event: SubmitEvent) => {
+  event.preventDefault();
+  renderStatus(RequestStatus.Loading, status);
   clearGifDetail(detailContainer);
 
-  if (results.length === 0) {
-    renderStatus(RequestStatus.Empty, status);
-    return;
+  try {
+    const results = await searchGifs(input.value);
+    showResults(results);
+  } catch (error: unknown) {
+    showRequestError(error);
   }
-
-  renderStatus(RequestStatus.Success, status, results.length);
-});
-
-input.addEventListener("input", () => {
-  if (input.value.trim() !== "") {
-    return;
-  }
-
-  const selectedRating: GifRating | "all" = ratingFilter.value as GifRating | "all";
-  const results = filterGifsByRating(gifs, selectedRating);
-
-  renderGallery(results, gallery);
-  clearGifDetail(detailContainer);
-  renderStatus(RequestStatus.Initial, status, results.length);
-});
-
-ratingFilter.addEventListener("change", () => {
-  form.requestSubmit();
 });
 
 gallery.addEventListener("click", (event) => {
@@ -112,18 +128,11 @@ gallery.addEventListener("click", (event) => {
 
   const detailButton = target.closest<HTMLButtonElement>("[data-gif-id]");
 
-  if (!detailButton) {
+  if (!detailButton?.dataset.gifId) {
     return;
   }
 
-  const gifId = detailButton.dataset.gifId;
-
-  if (!gifId) {
-    renderStatus(RequestStatus.Error, status);
-    return;
-  }
-
-  const selectedGif = findGifById(gifs, gifId);
+  const selectedGif = findGifById(currentGifs, detailButton.dataset.gifId);
 
   if (!selectedGif) {
     renderStatus(RequestStatus.Error, status);
@@ -136,20 +145,13 @@ gallery.addEventListener("click", (event) => {
 detailContainer.addEventListener("click", (event) => {
   const target = event.target;
 
-  if (!(target instanceof Element)) {
-    return;
+  if (
+    target instanceof Element
+    && target.closest('[data-action="close-detail"]')
+  ) {
+    clearGifDetail(detailContainer);
   }
-
-  const closeButton = target.closest<HTMLButtonElement>(
-    '[data-action="close-detail"]',
-  );
-
-  if (!closeButton) {
-    return;
-  }
-
-  clearGifDetail(detailContainer);
 });
 
-renderGallery(gifs, gallery);
-renderStatus(RequestStatus.Initial, status, gifs.length);
+renderStatus(RequestStatus.Initial, status);
+void loadTrending();
